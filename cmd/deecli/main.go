@@ -75,7 +75,7 @@ func main() {
 				{"git", "add", "."},
 				{"git", "commit", "-m", "Initial commit"},
 				{"git", "remote", "add", "origin", remote},
-				{"git", "push", "-u", "origin", "master"},
+				{"git", "push", "-u", "origin", "main"},
 			}
 
 			for _, c := range cmds {
