@@ -87,6 +87,8 @@ jobs:
 
       - name: Upload Linux binary
         uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ./release/linux/deecli-linux-amd64
@@ -95,6 +97,8 @@ jobs:
 
       - name: Upload Windows binary
         uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ./release/windows/deecli-windows-amd64.exe
@@ -103,6 +107,8 @@ jobs:
 
       - name: Upload macOS binary
         uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ./release/macos/deecli-darwin-amd64
