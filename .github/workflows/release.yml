@@ -34,7 +34,7 @@ jobs:
           ls -lh $output
 
       - name: Upload binary as artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.goos }}-${{ matrix.goarch }}-binary
           path: deecli-${{ matrix.goos }}-${{ matrix.goarch }}*
@@ -44,19 +44,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Download Linux binary
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: linux-amd64-binary
           path: ./release/linux
 
       - name: Download Windows binary
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: windows-amd64-binary
           path: ./release/windows
 
       - name: Download macOS binary
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: darwin-amd64-binary
           path: ./release/macos
@@ -70,8 +70,8 @@ jobs:
         id: create_release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ github.ref_name }}
-          name: Release ${{ github.ref_name }}
+          tag_name: ${{ github.event.workflow_run.head_commit.message }}
+          name: Release ${{ github.event.workflow_run.head_commit.message }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
