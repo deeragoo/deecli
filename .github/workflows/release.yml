@@ -1,12 +1,14 @@
 name: Build and Release
 
 on:
-  push:
-    tags:
-      - 'v*'  # Trigger on tags like v1.0.0
+  workflow_run:
+    workflows: ["Version Bump and Tag"]
+    types:
+      - completed
 
 jobs:
   build:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
