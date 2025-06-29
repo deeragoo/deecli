@@ -1,0 +1,65 @@
+name: Version Bump and Tag
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Version part to bump: patch, minor, major'
+        required: true
+        default: 'patch'
+
+jobs:
+  bump-version:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+
+      - name: Get current version
+        id: get_version
+        run: |
+          current=$(grep 'Version =' version/version.go | sed -E 's/.*"([^"]+)".*/\1/')
+          echo "Current version: $current"
+          echo "version=$current" >> "$GITHUB_OUTPUT"
+
+      - name: Calculate new version
+        id: bump
+        run: |
+          IFS='.' read -r MAJOR MINOR PATCH <<< "${{ steps.get_version.outputs.version }}"
+          case "${{ github.event.inputs.bump }}" in
+            major)
+              MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            minor)
+              MINOR=$((MINOR + 1)); PATCH=0 ;;
+            patch|*)
+              PATCH=$((PATCH + 1)) ;;
+          esac
+          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+          echo "New version: $NEW_VERSION"
+          echo "new_version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Update version.go
+        run: |
+          sed -i.bak -E 's/Version = ".*"/Version = "${{ steps.bump.outputs.new_version }}"/' version/version.go
+          rm version/version.go.bak
+
+      - name: Commit and push version bump
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add version/version.go
+          git commit -m "Bump version to v${{ steps.bump.outputs.new_version }}"
+          git push origin HEAD
+
+      - name: Tag the new version
+        run: |
+          git tag -a "v${{ steps.bump.outputs.new_version }}" -m "Release v${{ steps.bump.outputs.new_version }}"
+          git push origin "v${{ steps.bump.outputs.new_version }}"

@@ -8,7 +8,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     strategy:
       matrix:
         goos: [linux, windows, darwin]
@@ -30,6 +29,7 @@ jobs:
             output+=.exe
           fi
           GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -o $output ./cmd/deecli
+          ls -lh $output
 
       - name: Upload binary as artifact
         uses: actions/upload-artifact@v3
@@ -45,21 +45,28 @@ jobs:
         uses: actions/download-artifact@v3
         with:
           name: linux-amd64-binary
-          path: ./release
+          path: ./release/linux
 
       - name: Download Windows binary
         uses: actions/download-artifact@v3
         with:
           name: windows-amd64-binary
-          path: ./release
+          path: ./release/windows
 
       - name: Download macOS binary
         uses: actions/download-artifact@v3
         with:
           name: darwin-amd64-binary
-          path: ./release
+          path: ./release/macos
+
+      - name: Make Linux and macOS binaries executable
+        if: runner.os != 'Windows'
+        run: |
+          chmod +x ./release/linux/deecli-linux-amd64
+          chmod +x ./release/macos/deecli-darwin-amd64
 
       - name: Create GitHub Release and upload binaries
+        id: create_release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ github.ref_name }}
@@ -67,26 +74,26 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload release assets
+      - name: Upload Linux binary
         uses: actions/upload-release-asset@v1
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./release/deecli-linux-amd64
+          asset_path: ./release/linux/deecli-linux-amd64
           asset_name: deecli-linux-amd64
           asset_content_type: application/octet-stream
 
-      - name: Upload release asset Windows
+      - name: Upload Windows binary
         uses: actions/upload-release-asset@v1
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./release/deecli-windows-amd64.exe
+          asset_path: ./release/windows/deecli-windows-amd64.exe
           asset_name: deecli-windows-amd64.exe
           asset_content_type: application/octet-stream
 
-      - name: Upload release asset macOS
+      - name: Upload macOS binary
         uses: actions/upload-release-asset@v1
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./release/deecli-darwin-amd64
+          asset_path: ./release/macos/deecli-darwin-amd64
           asset_name: deecli-darwin-amd64
           asset_content_type: application/octet-stream
