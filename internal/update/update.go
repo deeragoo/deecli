@@ -8,6 +8,7 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"io"
 
 	update "github.com/inconshreveable/go-update"
 	"github.com/blang/semver/v4"
@@ -49,9 +50,8 @@ func getLatestRelease() (*githubRelease, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		buf := new(strings.Builder)
-		_, _ = buf.ReadFrom(resp.Body)
-		return nil, fmt.Errorf("GitHub API error: %s - %s", resp.Status, buf.String())
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("GitHub API error: %s - %s", resp.Status, string(body))
 	}
 
 	if resp.StatusCode == 404 && os.Getenv("GH_TOKEN") == "" {
