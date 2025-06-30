@@ -29,15 +29,35 @@ type githubRelease struct {
 
 func getLatestRelease() (*githubRelease, error) {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", owner, repo)
-	resp, err := http.Get(url)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// Add Authorization header for private repos
+	if token := os.Getenv("GH_TOKEN"); token != "" {
+		req.Header.Set("Authorization", "token "+token)
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		return nil, errors.New("failed to get latest release from GitHub: " + resp.Status)
+		buf := new(strings.Builder)
+		_, _ = buf.ReadFrom(resp.Body)
+		return nil, fmt.Errorf("GitHub API error: %s - %s", resp.Status, buf.String())
 	}
+
+	if resp.StatusCode == 404 && os.Getenv("GH_TOKEN") == "" {
+		fmt.Println("Repository may be private. Set GH_TOKEN to access private releases.")
+	}
+
 
 	var release githubRelease
 	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
