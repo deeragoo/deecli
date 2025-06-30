@@ -116,7 +116,19 @@ func UpdateSelf(cmd *cobra.Command, args []string, currentVersion string) {
 		return
 	}
 
-	resp, err := http.Get(assetURL)
+	req, err := http.NewRequest("GET", assetURL, nil)
+	if err != nil {
+		fmt.Println("Failed to create download request:", err)
+		return
+	}
+
+	if token := os.Getenv("GH_TOKEN"); token != "" {
+		req.Header.Set("Authorization", "token "+token)
+	}
+	req.Header.Set("Accept", "application/octet-stream")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
 	if err != nil {
 		fmt.Println("Failed to download update:", err)
 		return
@@ -127,6 +139,7 @@ func UpdateSelf(cmd *cobra.Command, args []string, currentVersion string) {
 		fmt.Println("Failed to download update: bad response", resp.Status)
 		return
 	}
+
 
 	err = update.Apply(resp.Body, update.Options{
 		TargetPath: os.Args[0],
