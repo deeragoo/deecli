@@ -19,6 +19,15 @@ import (
 	"github.com/deeragoo/deecli/encryptonite"
 )
 
+// Version command
+var versionCmd = &cobra.Command{
+	Use:   "version",
+	Short: "Print the version number of deecli",
+	Run: func(cmd *cobra.Command, args []string) {
+		fmt.Println("deecli version:", version.Version)
+	},
+}
+
 func main() {
 	rootCmd := &cobra.Command{
 		Use:   "deecli",
@@ -198,6 +207,7 @@ func main() {
 		githubCreateRepoCmd,
 		encryptTokenCmd,
 		decryptTokenCmd,
+		versionCmd,
 	)
 
 	if err := rootCmd.Execute(); err != nil {
