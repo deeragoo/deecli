@@ -43,7 +43,12 @@ func EncryptTokenInteractive() error {
 	if err != nil {
 		return fmt.Errorf("error creating secrets file: %w", err)
 	}
-	defer f.Close()
+
+	defer func() {
+		if err := f.Close(); err != nil {
+			fmt.Println("Warning: failed to close secrets file:", err)
+		}
+	}()
 
 	encJSON, err := json.MarshalIndent(secrets, "", "  ")
 	if err != nil {

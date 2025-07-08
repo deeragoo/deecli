@@ -32,6 +32,27 @@ deecli docker-ps
 
 ## Installation
 
+### Easy Installation Scripts
+
+To simplify installation, you can use the provided install scripts:
+
+- For Linux/macOS:
+
+  ```bash
+  chmod +x install.sh
+  ./install.sh
+  ```
+
+- For Windows PowerShell:
+  ```
+  .\install.ps1
+  ```
+
+These scripts will copy the deecli binary to ~/.deecli/bin (or %USERPROFILE%\.deecli\bin on Windows) and add that directory to your PATH automatically.
+
+Make sure you download the appropriate binary for your platform and place it in the same directory as the install script before running it.
+
+
 You can download pre-built binaries for your platform from the [GitHub Releases](https://github.com/deeragoo/deecli/releases/tag/v1.0.10).
 
 Alternatively, you can build from source:
@@ -41,7 +62,7 @@ git clone https://github.com/deeragoo/deecli.git
 cd deecli/cmd/deecli
 go build -o deecli main.go
 ```
-
+---
 # Usage
 
 ```

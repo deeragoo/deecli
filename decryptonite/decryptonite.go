@@ -9,9 +9,10 @@ import (
 	"os"
 	"strings"
 
-	"golang.org/x/crypto/scrypt"
 	"crypto/aes"
 	"crypto/cipher"
+
+	"golang.org/x/crypto/scrypt"
 )
 
 type Secrets struct {
@@ -61,7 +62,12 @@ func GetTokenFromSecrets() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer f.Close()
+
+	defer func() {
+		if err := f.Close(); err != nil {
+			fmt.Println("Warning: failed to close secrets file:", err)
+		}
+	}()
 
 	var secrets Secrets
 	err = json.NewDecoder(f).Decode(&secrets)

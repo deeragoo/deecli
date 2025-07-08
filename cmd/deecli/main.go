@@ -163,33 +163,31 @@ func main() {
 
 	// Encrypt token command
 	encryptTokenCmd := &cobra.Command{
-	Use:   "encrypt-token",
-	Short: "Interactively encrypt a GitHub token and save to ~/.secrets.json",
-	Run: func(cmd *cobra.Command, args []string) {
-		err := encryptonite.EncryptTokenInteractive()
-		if err != nil {
-			fmt.Println("Error:", err)
-			return
-		}
-	},
-}
+		Use:   "encrypt-token",
+		Short: "Interactively encrypt a GitHub token and save to ~/.secrets.json",
+		Run: func(cmd *cobra.Command, args []string) {
+			err := encryptonite.EncryptTokenInteractive()
+			if err != nil {
+				fmt.Println("Error:", err)
+				return
+			}
+		},
+	}
 
-// decrypt-token command
-decryptTokenCmd := &cobra.Command{
-	Use:   "decrypt-token",
-	Short: "Decrypt and display the GitHub token from ~/.secrets.json",
-	Run: func(cmd *cobra.Command, args []string) {
-		token, err := decryptonite.GetTokenFromSecrets()
-		if err != nil {
-			fmt.Println("Error decrypting GitHub token:", err)
-			return
-		}
-		fmt.Println("Decrypted GitHub token:")
-		fmt.Println(token)
-	},
-}
-
-
+	// decrypt-token command
+	decryptTokenCmd := &cobra.Command{
+		Use:   "decrypt-token",
+		Short: "Decrypt and display the GitHub token from ~/.secrets.json",
+		Run: func(cmd *cobra.Command, args []string) {
+			token, err := decryptonite.GetTokenFromSecrets()
+			if err != nil {
+				fmt.Println("Error decrypting GitHub token:", err)
+				return
+			}
+			fmt.Println("Decrypted GitHub token:")
+			fmt.Println(token)
+		},
+	}
 
 	rootCmd.AddCommand(
 		awsListCmd,
@@ -222,11 +220,18 @@ func getGitHubUsername(token string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Println("Warning: failed to close response body:", err)
+		}
+	}()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		buf := new(bytes.Buffer)
-		buf.ReadFrom(resp.Body)
+		if _, err := buf.ReadFrom(resp.Body); err != nil {
+			fmt.Println("Warning: failed to read response body:", err)
+		}
 		return "", fmt.Errorf("GitHub API error: %s", buf.String())
 	}
 
@@ -267,13 +272,20 @@ func createGitHubRepo(token, repoName string, private bool) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Println("Warning: failed to close response body:", err)
+		}
+	}()
 
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		return nil
 	}
 
 	buf := new(bytes.Buffer)
-	buf.ReadFrom(resp.Body)
+	if _, err := buf.ReadFrom(resp.Body); err != nil {
+		fmt.Println("Warning: failed to read error response body:", err)
+	}
 	return fmt.Errorf("GitHub API error: %s", buf.String())
 }

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"io"
 
-	update "github.com/inconshreveable/go-update"
+	"path/filepath"
 	"github.com/blang/semver/v4"
 	"github.com/spf13/cobra"
 )
@@ -47,7 +47,12 @@ func getLatestRelease() (*githubRelease, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Println("Warning: failed to close response body:", err)
+		}
+	}()
 
 	if resp.StatusCode != 200 {
 		body, _ := io.ReadAll(resp.Body)
@@ -57,7 +62,6 @@ func getLatestRelease() (*githubRelease, error) {
 	if resp.StatusCode == 404 && os.Getenv("GH_TOKEN") == "" {
 		fmt.Println("Repository may be private. Set GH_TOKEN to access private releases.")
 	}
-
 
 	var release githubRelease
 	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
@@ -133,20 +137,53 @@ func UpdateSelf(cmd *cobra.Command, args []string, currentVersion string) {
 		fmt.Println("Failed to download update:", err)
 		return
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Println("Warning: failed to close response body:", err)
+		}
+	}()
 
 	if resp.StatusCode != 200 {
 		fmt.Println("Failed to download update: bad response", resp.Status)
 		return
 	}
 
-
-	err = update.Apply(resp.Body, update.Options{
-		TargetPath: os.Args[0],
-	})
+	// Read the downloaded binary into memory
+	binaryData, err := io.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Println("Failed to apply update:", err)
+		fmt.Println("Failed to read update binary:", err)
 		return
+	}
+
+	// Update the running binary (in-place)
+	err = os.WriteFile(os.Args[0], binaryData, 0755)
+	if err != nil {
+		fmt.Println("Failed to update running binary:", err)
+		return
+	}
+
+	// Also update the binary in ~/.deecli/bin if it exists
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		fmt.Println("Failed to get user home directory:", err)
+		return
+	}
+
+	deecliPath := filepath.Join(homeDir, ".deecli", "bin", "deecli")
+	if runtime.GOOS == "windows" {
+		deecliPath += ".exe"
+	}
+
+	// Check if the file exists before overwriting
+	if _, err := os.Stat(deecliPath); err == nil {
+		err = os.WriteFile(deecliPath, binaryData, 0755)
+		if err != nil {
+			fmt.Printf("Failed to update binary in %s: %v\n", deecliPath, err)
+		} else {
+			fmt.Printf("Updated binary in %s\n", deecliPath)
+		}
+	} else {
+		fmt.Printf("No binary found at %s, skipping update there.\n", deecliPath)
 	}
 
 	fmt.Println("Update applied successfully! Please restart the CLI.")
