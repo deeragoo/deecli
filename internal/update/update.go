@@ -173,24 +173,31 @@ func UpdateSelf(cmd *cobra.Command, args []string, currentVersion string) {
 		return
 	}
 
-	deecliPath := filepath.Join(homeDir, ".deecli", "bin", "deecli")
+	deecliPath := []string{
+		filepath.Join(homeDir, ".deecli", "bin", "deecli"),
+		filepath.Join(homeDir, ".deecli", "deecli"),
+	}
+
 	if runtime.GOOS == "windows" {
-		deecliPath += ".exe"
+		for i := range deecliPath {
+			deecliPath[i] += ".exe"
+		}
 	}
 
 	// Check if the file exists before overwriting
-	if _, err := os.Stat(deecliPath); err == nil {
-		err = update.Apply(bytes.NewReader(binaryData), update.Options{
-			TargetPath: deecliPath,
-		})
-		if err != nil {
-			fmt.Printf("Failed to update binary in %s: %v\n", deecliPath, err)
+	for _, path := range deecliPath {
+		if _, err := os.Stat(path); err == nil {
+			err = update.Apply(bytes.NewReader(binaryData), update.Options{
+				TargetPath: path,
+			})
+			if err != nil {
+				fmt.Printf("Failed to update binary in %s: %v\n", path, err)
+			} else {
+				fmt.Printf("Updated binary in %s\n", path)
+			}
 		} else {
-			fmt.Printf("Updated binary in %s\n", deecliPath)
+			fmt.Printf("No binary found at %s, skipping update there.\n", path)
 		}
-	} else {
-		fmt.Printf("No binary found at %s, skipping update there.\n", deecliPath)
 	}
-
 	fmt.Println("Update applied successfully! Please restart the CLI.")
 }
