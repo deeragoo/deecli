@@ -1,17 +1,19 @@
 package update
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
-	"io"
 
-	"path/filepath"
 	"github.com/blang/semver/v4"
+	update "github.com/inconshreveable/go-update"
 	"github.com/spf13/cobra"
 )
 
@@ -156,7 +158,9 @@ func UpdateSelf(cmd *cobra.Command, args []string, currentVersion string) {
 	}
 
 	// Update the running binary (in-place)
-	err = os.WriteFile(os.Args[0], binaryData, 0755)
+	err = update.Apply(bytes.NewReader(binaryData), update.Options{
+		TargetPath: os.Args[0],
+	})
 	if err != nil {
 		fmt.Println("Failed to update running binary:", err)
 		return
@@ -176,7 +180,9 @@ func UpdateSelf(cmd *cobra.Command, args []string, currentVersion string) {
 
 	// Check if the file exists before overwriting
 	if _, err := os.Stat(deecliPath); err == nil {
-		err = os.WriteFile(deecliPath, binaryData, 0755)
+		err = update.Apply(bytes.NewReader(binaryData), update.Options{
+			TargetPath: deecliPath,
+		})
 		if err != nil {
 			fmt.Printf("Failed to update binary in %s: %v\n", deecliPath, err)
 		} else {
