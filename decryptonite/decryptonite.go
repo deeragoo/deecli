@@ -109,8 +109,12 @@ func GetTokenByName(name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer f.Close()
-
+	
+	defer func() {
+    if err := f.Close(); err != nil {
+        fmt.Println("Warning: failed to close file:", err)
+    }
+}()
 	secrets := Secrets{}
 	if err := json.NewDecoder(f).Decode(&secrets); err != nil {
 		return "", fmt.Errorf("error decoding secrets file: %w", err)

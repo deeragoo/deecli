@@ -46,7 +46,11 @@ func getWorkflowID(token, repo, workflowFilename string) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+    if err := resp.Body.Close(); err != nil {
+        fmt.Println("Warning: failed to close response body:", err)
+    }
+}()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(resp.Body)
@@ -101,7 +105,12 @@ func triggerGitHubWorkflow(token, repo string, workflowID int64, ref string) err
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	
+defer func() {
+    if err := resp.Body.Close(); err != nil {
+        fmt.Println("Warning: failed to close response body:", err)
+    }
+}()
 
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		fmt.Println("✅ Workflow triggered successfully!")
