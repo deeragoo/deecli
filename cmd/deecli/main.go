@@ -80,45 +80,50 @@ func getWorkflowID(token, repo, workflowFilename string) (int64, error) {
 	return 0, fmt.Errorf("workflow file %q not found in repo %s", workflowFilename, repo)
 }
 
-func triggerGitHubWorkflow(token, repo string, workflowID int64, ref string) error {
-	url := fmt.Sprintf("https://api.github.com/repos/%s/actions/workflows/%d/dispatches", repo, workflowID)
-	payload := map[string]interface{}{
-		"ref": ref,
-	}
+func triggerGitHubWorkflow(token, repo string, workflowID int64, ref string, inputs map[string]string) error {
+    url := fmt.Sprintf("https://api.github.com/repos/%s/actions/workflows/%d/dispatches", repo, workflowID)
 
-	jsonBody, err := json.Marshal(payload)
-	if err != nil {
-		return err
-	}
+    payload := map[string]interface{}{
+        "ref": ref,
+    }
 
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonBody))
-	if err != nil {
-		return err
-	}
+    if len(inputs) > 0 {
+        payload["inputs"] = inputs
+    }
 
-	req.Header.Set("Authorization", "token "+token)
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("Content-Type", "application/json")
+    jsonBody, err := json.Marshal(payload)
+    if err != nil {
+        return err
+    }
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	
-defer func() {
+    req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonBody))
+    if err != nil {
+        return err
+    }
+
+    req.Header.Set("Authorization", "token "+token)
+    req.Header.Set("Accept", "application/vnd.github+json")
+    req.Header.Set("Content-Type", "application/json")
+
+    client := &http.Client{}
+    resp, err := client.Do(req)
+    if err != nil {
+        return err
+    }
+    
+    defer func() {
     if err := resp.Body.Close(); err != nil {
         fmt.Println("Warning: failed to close response body:", err)
     }
 }()
 
-	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		fmt.Println("✅ Workflow triggered successfully!")
-		return nil
-	}
+    if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+        fmt.Println("✅ Workflow triggered successfully!")
+        return nil
+    }
 
-	body, _ := io.ReadAll(resp.Body)
-	return fmt.Errorf("GitHub API error: %s", body)
+    body, _ := io.ReadAll(resp.Body)
+    return fmt.Errorf("GitHub API error: %s", body)
 }
 
 func main() {
@@ -388,42 +393,43 @@ var githubRunWorkflowCmd = &cobra.Command{
 	Use:   "github-run-workflow <repo> <workflow-file>",
 	Short: "Trigger a GitHub Actions workflow via workflow_dispatch",
 	Args:  cobra.ExactArgs(2),
-	Run: func(cmd *cobra.Command, args []string) {
-		repo := args[0]         // Format: "owner/repo"
-		workflowFilename := args[1] // e.g. "ci.yml" or "build.yml"
+Run: func(cmd *cobra.Command, args []string) {
+    repo := args[0]
+    workflowFilename := args[1]
 
-		ref, _ := cmd.Flags().GetString("ref")
-		if ref == "" {
-			ref = "main"
-		}
+    ref, _ := cmd.Flags().GetString("ref")
+    tokenName, _ := cmd.Flags().GetString("token")
+    bump, _ := cmd.Flags().GetString("bump")
 
-		token := os.Getenv("GH_TOKEN")
-		if token == "" {
-			var err error
-			token, err = decryptonite.GetTokenByName("github_token") // pass token name explicitly
-			if err != nil {
-				fmt.Println("Error getting GitHub token:", err)
-				return
-			}
-		}
+    token, err := decryptonite.GetTokenByName(tokenName)
+    if err != nil {
+        fmt.Println("Error getting GitHub token:", err)
+        return
+    }
 
-		fmt.Printf("Fetching workflow ID for %q in repo %q...\n", workflowFilename, repo)
-		workflowID, err := getWorkflowID(token, repo, workflowFilename)
-		if err != nil {
-			fmt.Println("Error:", err)
-			return
-		}
+    fmt.Printf("Fetching workflow ID for %q in repo %q...\n", workflowFilename, repo)
+    workflowID, err := getWorkflowID(token, repo, workflowFilename)
+    if err != nil {
+        fmt.Println("Error:", err)
+        return
+    }
 
-		fmt.Printf("Triggering workflow ID %d on repo %q (ref: %s)...\n", workflowID, repo, ref)
-		err = triggerGitHubWorkflow(token, repo, workflowID, ref)
-		if err != nil {
-			fmt.Println("Error:", err)
-		}
-	},
-}
+    inputs := map[string]string{}
+    if bump != "" {
+        inputs["bump"] = bump
+    }
+
+    fmt.Printf("Triggering workflow ID %d on repo %q (ref: %s) with inputs %v...\n", workflowID, repo, ref, inputs)
+    err = triggerGitHubWorkflow(token, repo, workflowID, ref, inputs)
+    if err != nil {
+        fmt.Println("Error:", err)
+    }
+},}
 
 githubRunWorkflowCmd.Flags().String("ref", "main", "Git branch or tag to run the workflow on")
 githubRunWorkflowCmd.Flags().String("token", "github_token", "Token name in ~/.secrets.json")
+githubRunWorkflowCmd.Flags().String("bump", "", "Version bump type (patch, minor, major)")
+
 	rootCmd.AddCommand(
 		awsListCmd,
 		dockerPsCmd,
