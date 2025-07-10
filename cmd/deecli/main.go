@@ -17,6 +17,7 @@ import (
 
 	"github.com/deeragoo/deecli/decryptonite"
 	"github.com/deeragoo/deecli/encryptonite"
+	"golang.org/x/term"
 )
 
 // Version command
@@ -173,7 +174,7 @@ func main() {
 	// Encrypt token command
 	encryptTokenCmd := &cobra.Command{
 		Use:   "encrypt-token",
-		Short: "Interactively encrypt a GitHub token and save to ~/.secrets.json",
+		Short: "Interactively encrypt a token and save to ~/.secrets.json",
 		Run: func(cmd *cobra.Command, args []string) {
 			err := encryptonite.EncryptTokenInteractive()
 			if err != nil {
@@ -186,18 +187,110 @@ func main() {
 	// decrypt-token command
 	decryptTokenCmd := &cobra.Command{
 		Use:   "decrypt-token",
-		Short: "Decrypt and display the GitHub token from ~/.secrets.json",
+		Short: "Decrypt and display a token from ~/.secrets.json",
 		Run: func(cmd *cobra.Command, args []string) {
 			token, err := decryptonite.GetTokenFromSecrets()
 			if err != nil {
-				fmt.Println("Error decrypting GitHub token:", err)
+				fmt.Println("Error decrypting token:", err)
 				return
 			}
-			fmt.Println("Decrypted GitHub token:")
+			fmt.Println("Decrypted token:", token)
 			fmt.Println(token)
 		},
 	}
+	
+	
+// delete-token command
+var deleteTokenCmd = &cobra.Command{
+	Use:   "delete-token",
+	Short: "Delete a token from ~/.secrets.json after verifying passphrase",
+	Run: func(cmd *cobra.Command, args []string) {
+		secretsFile := os.Getenv("HOME") + "/.secrets.json"
+		secrets := encryptonite.Secrets{}
 
+		// Load secrets
+		f, err := os.Open(secretsFile)
+		if err != nil {
+			fmt.Println("Error opening secrets file:", err)
+			return
+		}
+		defer func() {
+			if cerr := f.Close(); cerr != nil {
+				fmt.Println("Warning: failed to close file:", cerr)
+			}
+		}()
+
+		if err := json.NewDecoder(f).Decode(&secrets); err != nil {
+			fmt.Println("Error decoding secrets file:", err)
+			return
+		}
+
+		// Get token name
+		fmt.Print("Enter token name to delete: ")
+		tokenName, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+		tokenName = strings.TrimSpace(tokenName)
+
+		encryptedToken, exists := secrets[tokenName]
+		if !exists {
+			fmt.Printf("Token %q not found.\n", tokenName)
+			return
+		}
+
+		// Confirm deletion
+		fmt.Printf("Are you sure you want to delete token %q? (y/n): ", tokenName)
+		confirm, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+		confirm = strings.TrimSpace(strings.ToLower(confirm))
+		if confirm != "y" && confirm != "yes" {
+			fmt.Println("Aborted by user.")
+			return
+		}
+
+		// Ask for passphrase to verify
+		fmt.Print("Enter passphrase for token to confirm deletion: ")
+		passBytes, err := term.ReadPassword(int(os.Stdin.Fd()))
+		fmt.Println()
+		if err != nil {
+			fmt.Println("Error reading passphrase:", err)
+			return
+		}
+		passphrase := strings.TrimSpace(string(passBytes))
+
+		// Attempt to decrypt to verify passphrase
+		_, err = decryptonite.Decrypt(encryptedToken, passphrase)
+		if err != nil {
+			fmt.Println("Passphrase incorrect or decryption failed. Aborting deletion.")
+			return
+		}
+
+		// Delete the token
+		delete(secrets, tokenName)
+
+		// Save updated secrets
+		fw, err := os.Create(secretsFile)
+		if err != nil {
+			fmt.Println("Error writing secrets file:", err)
+			return
+		}
+		defer func() {
+			if cerr := fw.Close(); cerr != nil {
+				fmt.Println("Warning: failed to close file:", cerr)
+			}
+		}()
+
+		encJSON, err := json.MarshalIndent(secrets, "", "  ")
+		if err != nil {
+			fmt.Println("Error encoding secrets:", err)
+			return
+		}
+
+		if _, err := fw.Write(encJSON); err != nil {
+			fmt.Println("Error saving secrets file:", err)
+			return
+		}
+
+		fmt.Printf("Token %q deleted successfully.\n", tokenName)
+	},
+}
 	rootCmd.AddCommand(
 		awsListCmd,
 		dockerPsCmd,
@@ -208,6 +301,7 @@ func main() {
 		encryptTokenCmd,
 		decryptTokenCmd,
 		versionCmd,
+		deleteTokenCmd,
 	)
 
 	if err := rootCmd.Execute(); err != nil {

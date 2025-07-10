@@ -14,39 +14,93 @@ import (
 	"strings"
 
 	"golang.org/x/crypto/scrypt"
+	"golang.org/x/term"
 )
 
-type Secrets struct {
-	GithubToken string `json:"github_token"`
+type Secrets map[string]string
+
+func EncryptTokenInteractive() error {
+	fmt.Println("⚠️  WARNING: If you forget this passphrase, your token cannot be recovered.")
+	fmt.Println("Save your passphrase securely (e.g., password manager).")
+	fmt.Println()
+
+	fmt.Print("Enter token name (e.g. github, aws, stripe): ")
+	tokenName, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+	tokenName = strings.TrimSpace(tokenName)
+
+secrets := Secrets{}
+secretsFile := os.Getenv("HOME") + "/.secrets.json"
+
+// Load existing secrets (if any)
+fi, err := os.Stat(secretsFile)
+if err == nil {
+    if fi.Size() == 0 {
+        secrets = Secrets{} // empty file, no secrets yet
+    } else {
+        f, err := os.Open(secretsFile)
+        if err != nil {
+            return fmt.Errorf("error opening secrets file: %w", err)
+        }
+        		
+        defer func() {
+			if cerr := f.Close(); cerr != nil {
+				fmt.Println("Warning: failed to close file:", cerr)
+			}
+		}() // defer immediately after open
+
+        if err := json.NewDecoder(f).Decode(&secrets); err != nil {
+            return fmt.Errorf("error decoding secrets file: %w", err)
+        }
+    }
+} else if !os.IsNotExist(err) {
+    return fmt.Errorf("error checking secrets file: %w", err)
 }
 
-// EncryptTokenInteractive prompts user and encrypts token then saves it
-func EncryptTokenInteractive() error {
-	fmt.Print("Enter your GitHub Personal Access Token: ")
-	token, _ := bufio.NewReader(os.Stdin).ReadString('\n')
-	token = strings.TrimSpace(token)
+	// Check for existing token
+	if _, exists := secrets[tokenName]; exists {
+		fmt.Printf("Token %q already exists. Overwrite? (y/n): ", tokenName)
+		confirm, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+		confirm = strings.TrimSpace(strings.ToLower(confirm))
+		if confirm != "y" && confirm != "yes" {
+			fmt.Println("Aborted by user.")
+			return nil
+		}
+	}
 
-	fmt.Print("Enter a passphrase to encrypt the token: ")
-	passphrase, _ := bufio.NewReader(os.Stdin).ReadString('\n')
-	passphrase = strings.TrimSpace(passphrase)
+	fmt.Printf("Enter value for %s token: ", tokenName)
+	tokenValue, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+	tokenValue = strings.TrimSpace(tokenValue)
 
-	encrypted, err := encrypt(token, passphrase)
+	// Ask for passphrase (with confirmation)
+	fmt.Print("Enter passphrase to encrypt token: ")
+	passBytes, _ := term.ReadPassword(int(os.Stdin.Fd()))
+	fmt.Println()
+	passphrase := strings.TrimSpace(string(passBytes))
+
+	fmt.Print("Confirm passphrase: ")
+	confirmPassBytes, _ := term.ReadPassword(int(os.Stdin.Fd()))
+	fmt.Println()
+	confirmPassphrase := strings.TrimSpace(string(confirmPassBytes))
+
+	if passphrase != confirmPassphrase {
+		return fmt.Errorf("passphrases do not match")
+	}
+
+	encrypted, err := encrypt(tokenValue, passphrase)
 	if err != nil {
 		return fmt.Errorf("encryption error: %w", err)
 	}
 
-	secrets := Secrets{
-		GithubToken: encrypted,
-	}
+	// Save token
+	secrets[tokenName] = encrypted
 
-	f, err := os.Create(os.Getenv("HOME") + "/.secrets.json")
+	fw, err := os.Create(secretsFile)
 	if err != nil {
 		return fmt.Errorf("error creating secrets file: %w", err)
 	}
-
 	defer func() {
-		if err := f.Close(); err != nil {
-			fmt.Println("Warning: failed to close secrets file:", err)
+		if cerr := fw.Close(); cerr != nil {
+			fmt.Println("Warning: failed to close file:", cerr)
 		}
 	}()
 
@@ -55,11 +109,11 @@ func EncryptTokenInteractive() error {
 		return fmt.Errorf("JSON marshal error: %w", err)
 	}
 
-	if _, err := f.Write(encJSON); err != nil {
+	if _, err := fw.Write(encJSON); err != nil {
 		return fmt.Errorf("error writing secrets file: %w", err)
 	}
 
-	fmt.Println("Token encrypted and saved to ~/.secrets.json")
+	fmt.Printf("%s token encrypted and saved to ~/.secrets.json\n", tokenName)
 	return nil
 }
 
