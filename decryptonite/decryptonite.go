@@ -100,3 +100,39 @@ func Decrypt(encryptedB64, passphrase string) (string, error) {
 
 	return string(plaintext), nil
 }
+
+
+// GetTokenByName decrypts and returns a token by name silently (no prompts).
+func GetTokenByName(name string) (string, error) {
+	secretsFile := os.Getenv("HOME") + "/.secrets.json"
+	f, err := os.Open(secretsFile)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	secrets := Secrets{}
+	if err := json.NewDecoder(f).Decode(&secrets); err != nil {
+		return "", fmt.Errorf("error decoding secrets file: %w", err)
+	}
+
+	encryptedToken, ok := secrets[name]
+	if !ok {
+		return "", fmt.Errorf("token %q not found in secrets", name)
+	}
+
+	fmt.Print("Enter passphrase to decrypt token: ")
+	passBytes, err := term.ReadPassword(int(os.Stdin.Fd()))
+	fmt.Println()
+	if err != nil {
+		return "", err
+	}
+	passphrase := strings.TrimSpace(string(passBytes))
+
+	token, err := Decrypt(encryptedToken, passphrase)
+	if err != nil {
+		return "", err
+	}
+
+	return token, nil
+}

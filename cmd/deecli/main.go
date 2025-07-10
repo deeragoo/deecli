@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"io"
 	"os/exec"
 	"strings"
 
@@ -27,6 +28,88 @@ var versionCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("deecli version:", version.Version)
 	},
+}
+
+func getWorkflowID(token, repo, workflowFilename string) (int64, error) {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/actions/workflows", repo)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return 0, err
+	}
+
+	req.Header.Set("Authorization", "token "+token)
+	req.Header.Set("Accept", "application/vnd.github+json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(resp.Body)
+		return 0, fmt.Errorf("GitHub API error listing workflows: %s", string(body))
+	}
+
+	var data struct {
+		Workflows []struct {
+			ID   int64  `json:"id"`
+			Name string `json:"name"`
+			Path string `json:"path"`
+		} `json:"workflows"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return 0, err
+	}
+
+	// Try to find workflow by exact path (filename)
+	for _, wf := range data.Workflows {
+		if strings.HasSuffix(wf.Path, workflowFilename) {
+			return wf.ID, nil
+		}
+	}
+
+	// Not found
+	return 0, fmt.Errorf("workflow file %q not found in repo %s", workflowFilename, repo)
+}
+
+func triggerGitHubWorkflow(token, repo string, workflowID int64, ref string) error {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/actions/workflows/%d/dispatches", repo, workflowID)
+	payload := map[string]interface{}{
+		"ref": ref,
+	}
+
+	jsonBody, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return err
+	}
+
+	req.Header.Set("Authorization", "token "+token)
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		fmt.Println("✅ Workflow triggered successfully!")
+		return nil
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	return fmt.Errorf("GitHub API error: %s", body)
 }
 
 func main() {
@@ -291,6 +374,47 @@ var deleteTokenCmd = &cobra.Command{
 		fmt.Printf("Token %q deleted successfully.\n", tokenName)
 	},
 }
+
+var githubRunWorkflowCmd = &cobra.Command{
+	Use:   "github-run-workflow <repo> <workflow-file>",
+	Short: "Trigger a GitHub Actions workflow via workflow_dispatch",
+	Args:  cobra.ExactArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		repo := args[0]         // Format: "owner/repo"
+		workflowFilename := args[1] // e.g. "ci.yml" or "build.yml"
+
+		ref, _ := cmd.Flags().GetString("ref")
+		if ref == "" {
+			ref = "main"
+		}
+
+		token := os.Getenv("GH_TOKEN")
+		if token == "" {
+			var err error
+			token, err = decryptonite.GetTokenByName("github_token") // pass token name explicitly
+			if err != nil {
+				fmt.Println("Error getting GitHub token:", err)
+				return
+			}
+		}
+
+		fmt.Printf("Fetching workflow ID for %q in repo %q...\n", workflowFilename, repo)
+		workflowID, err := getWorkflowID(token, repo, workflowFilename)
+		if err != nil {
+			fmt.Println("Error:", err)
+			return
+		}
+
+		fmt.Printf("Triggering workflow ID %d on repo %q (ref: %s)...\n", workflowID, repo, ref)
+		err = triggerGitHubWorkflow(token, repo, workflowID, ref)
+		if err != nil {
+			fmt.Println("Error:", err)
+		}
+	},
+}
+
+githubRunWorkflowCmd.Flags().String("ref", "main", "Git branch or tag to run the workflow on")
+githubRunWorkflowCmd.Flags().String("token", "github_token", "Token name in ~/.secrets.json")
 	rootCmd.AddCommand(
 		awsListCmd,
 		dockerPsCmd,
@@ -302,6 +426,7 @@ var deleteTokenCmd = &cobra.Command{
 		decryptTokenCmd,
 		versionCmd,
 		deleteTokenCmd,
+		githubRunWorkflowCmd,
 	)
 
 	if err := rootCmd.Execute(); err != nil {
